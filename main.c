@@ -5,6 +5,12 @@
 #include <unistd.h>
 #include <string.h>
 
+typedef struct	s_list
+{
+	void	*data;
+	struct s_list	*next;
+}	t_list;
+
 typedef struct
 {
 	int				id;
@@ -16,11 +22,12 @@ typedef struct
 	int				nb_compiles;
 	int				dongle_cooldown;
 	int				*burned;
+	t_list	*lst;
 	struct timeval	*dongles;
 	pthread_mutex_t	*lock;
 	char			*scheduler;
 	struct timeval	tv;
-} coder;
+}	coder;
 
 coder	*make_coders(void)
 {
@@ -29,6 +36,7 @@ coder	*make_coders(void)
 	pthread_mutex_t	*lock;
 	int				nb[2];
 	int				*burned;
+	t_list	*lst;
 
 	nb[0] = 2;
 	lock = malloc(sizeof(pthread_mutex_t));
@@ -37,6 +45,9 @@ coder	*make_coders(void)
 	dongles = malloc(nb[0] * sizeof(struct timeval));
 	burned = malloc(sizeof(int));
 	burned[0] = 0;
+	lst = malloc(sizeof(t_list));
+	lst -> data = (void *)&coders[0];
+	lst -> next = NULL;
 	nb[1] = 0;
 	while (nb[1] < nb[0])
 	{
@@ -50,6 +61,8 @@ coder	*make_coders(void)
 		coders[nb[1]].dongle_cooldown = 100;
 		coders[nb[1]].dongles = dongles;
 		coders[nb[1]].scheduler = "fifo";
+		if (strcmp(coders[nb[1]].scheduler, "edf") == 0)
+			coders[nb[1]].lst = lst;
 		coders[nb[1]].lock = lock;
 		coders[nb[1]].burned = burned;
 		gettimeofday(&coders[nb[1]].tv, NULL);
@@ -170,7 +183,7 @@ void	fifo(coder *new)
 		if (skip_time(new -> refactor_time, new, tv, 0))
 			return ;
 	}
-	printf("%d %d is finished\n", time_since(new -> tv), new -> id);
+	printf("%d %d is finished %p\n", time_since(new -> tv), new -> id, (new -> lst) -> next);
 	return ;
 }
 

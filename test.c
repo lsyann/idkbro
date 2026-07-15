@@ -1,18 +1,43 @@
 #include <stdio.h>
-#include <sys/time.h>
 #include <stdlib.h>
-#include <unistd.h>
+
+typedef struct
+{
+        int                             id;
+        int                             nb_coders;
+        int                             burnout_time;
+        int                             compile_time;
+        int                             debug_time;
+        int                             refactor_time;
+        int                             nb_compiles;
+        int                             dongle_cooldown;
+        int                             *burned;
+        struct timeval  *dongles;
+        pthread_mutex_t *lock;
+        char                    *scheduler;
+        struct timeval  tv;
+}       coder;
+
+typedef struct  s_list
+{
+        int	data;
+        struct s_list   *next;
+}	t_list;
 
 int main()
 {
-    struct timeval tv;
+	t_list *first;
 
-    gettimeofday(&tv, NULL);
-
-    printf("%lu\n", tv.tv_usec / 1000);
-    sleep(5);
-    gettimeofday(&tv, NULL);
-    printf("%lu\n", tv.tv_usec);
-
-    return(0);
+	first = malloc(sizeof(t_list));
+	first -> data = 1;
+	t_list *second;
+	second = malloc(sizeof(t_list));
+	second->data = 2;
+	first->next = second;
+	second->next = NULL;
+	while (first)
+	{
+		printf("%d\n", first->data);
+		first = first->next;
+	}
 }
