@@ -1,166 +1,83 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <pthread.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <string.h>
+#include "header.h"
 
-typedef struct	s_list
+void	lesslines(char **arg, t_coder *idk)
 {
-	void	*data;
-	struct s_list	*next;
-}	t_list;
+	idk->burnout_time = atoi(arg[2]);
+	idk->compile_time = atoi(arg[3]);
+	idk->debug_time = atoi(arg[4]);
+	idk->refactor_time = atoi(arg[5]);
+	idk->nb_compiles = atoi(arg[6]);
+	idk->dongle_cooldown = atoi(arg[7]);
+	idk->scheduler = arg[8];
+	gettimeofday(&idk->tv, NULL);
+	gettimeofday(&idk->last_compile, NULL);
+	idk->last_compile.tv_sec -= 1000;
+}
 
-typedef struct
+void	somanylines(t_coder **coder, pthread_mutex_t **lock,
+	struct timeval **dongles, int **burned, int *nb)
 {
-	int				id;
-	int				nb_coders;
-	int				burnout_time;
-	int				compile_time;
-	int				debug_time;
-	int				refactor_time;
-	int				nb_compiles;
-	int				dongle_cooldown;
-	int				*burned;
-	t_list	*lst;
-	struct timeval	*dongles;
-	pthread_mutex_t	*lock;
-	char			*scheduler;
-	struct timeval	tv;
-}	coder;
+	(void)coder;
+	(void)lock;
+	(void)dongles;
+	(void)burned;
+	(void)nb;
+	*coder = malloc(*nb * sizeof(t_coder));
+	*lock = malloc(sizeof(pthread_mutex_t));
+	pthread_mutex_init(*lock, NULL);
+	*dongles = malloc(*nb * sizeof(struct timeval));
+	*burned = malloc(sizeof(int));
+	*burned[0] = 0;
+}
 
-coder	*make_coders(void)
+t_coder	*make_coders(char **arg)
 {
-	coder			*coders;
+	t_coder			*coders;
 	struct timeval	*dongles;
 	pthread_mutex_t	*lock;
 	int				nb[2];
 	int				*burned;
-	t_list	*lst;
+	t_list			*lst;
 
-	nb[0] = 2;
-	lock = malloc(sizeof(pthread_mutex_t));
-	pthread_mutex_init(lock, NULL);
-	coders = malloc(nb[0] * sizeof(coder));
-	dongles = malloc(nb[0] * sizeof(struct timeval));
-	burned = malloc(sizeof(int));
+	nb[0] = atoi(arg[1]);
+	somanylines(&coders, &lock, &dongles, &burned, &nb[0]);
 	burned[0] = 0;
-	lst = malloc(sizeof(t_list));
-	lst -> data = (void *)&coders[0];
-	lst -> next = NULL;
+	lst = NULL;
 	nb[1] = 0;
 	while (nb[1] < nb[0])
 	{
+		lesslines(arg, &coders[nb[1]]);
 		coders[nb[1]].id = nb[1] + 1;
 		coders[nb[1]].nb_coders = nb[0];
-		coders[nb[1]].burnout_time = 1000;
-		coders[nb[1]].compile_time = 200;
-		coders[nb[1]].debug_time = 200;
-		coders[nb[1]].refactor_time = 200;
-		coders[nb[1]].nb_compiles = 3;
-		coders[nb[1]].dongle_cooldown = 100;
 		coders[nb[1]].dongles = dongles;
-		coders[nb[1]].scheduler = "fifo";
-		if (strcmp(coders[nb[1]].scheduler, "edf") == 0)
-			coders[nb[1]].lst = lst;
+		coders[nb[1]].lst = lst;
 		coders[nb[1]].lock = lock;
 		coders[nb[1]].burned = burned;
-		gettimeofday(&coders[nb[1]].tv, NULL);
 		gettimeofday(&dongles[nb[1]], NULL);
-		dongles[nb[1]++].tv_sec -= 1;
+		dongles[nb[1]++].tv_sec -= 1000;
 	}
 	return (coders);
 }
 
-int	time_since(struct timeval tv)
+int	schedule(t_coder *new)
 {
-	struct timeval	new;
-	int				seconds;
-	int				mili;
-
-	gettimeofday(&new, NULL);
-	seconds = (new.tv_sec - tv.tv_sec) * 1000;
-	mili = new.tv_usec - tv.tv_usec;
-	if (mili >= 0)
-		mili = (mili + 500) / 1000;
-	else
-		mili = (mili - 500) / 1000;
-	if (mili < 0)
-	{
-		mili = 1000 + mili;
-		seconds -= 1000;
-	}
-	return (seconds + mili);
-}
-
-int	check_burnout(coder *new, struct timeval tv)
-{
-	if (time_since(tv) > new -> burnout_time)
-	{
-		new -> burned[0] = 1;
-		printf("%d %d burned out\n", time_since(new -> tv), new -> id);
-		return (1);
-	}
-	if (new -> burned[0])
-		return (1);
-	return (0);
-}
-
-int	skip_time(int nb, coder *new, struct timeval tv, int compile)
-{
-	struct timeval	timer;
-	int				idk;
-
-	idk = new -> id % new -> nb_coders;
-	gettimeofday(&timer, NULL);
-	while (nb > time_since(timer))
-	{
-		if (compile)
-		{
-			gettimeofday(&(new -> dongles[new -> id - 1]), NULL);
-			gettimeofday(&(new -> dongles[idk]), NULL);
-		}
-		if (check_burnout(new, tv))
+	if (strcmp(new -> scheduler, "fifo") == 0)
+		if (fifo(new))
 			return (1);
-		usleep(1000);
-	}
+	if (strcmp(new -> scheduler, "edf") == 0)
+		if (edf(new))
+			return (1);
 	return (0);
 }
 
-int	dongles_ready(coder *new)
-{
-	int	index1;
-	int	index2;
-	int	cooldown;
-	int	idk;
-
-	pthread_mutex_lock(new -> lock);
-	idk = 0;
-	cooldown = new -> dongle_cooldown;
-	index1 = new -> id - 1;
-	index2 = new -> id % new -> nb_coders;
-	if (time_since(new -> dongles[index1]) < cooldown)
-		idk = 1;
-	if (time_since(new -> dongles[index2]) < cooldown)
-		idk = 1;
-	pthread_mutex_unlock(new -> lock);
-	if (idk)
-	{
-		usleep(1000);
-		return (0);
-	}
-	printf("%d %d has taken a dongle\n", time_since(new -> tv), new -> id);
-	printf("%d %d has taken a dongle\n", time_since(new -> tv), new -> id);
-	printf("%d %d is compiling\n", time_since(new -> tv), new -> id);
-	return (1);
-}
-
-void	fifo(coder *new)
+void	*coder_routine(void *idk)
 {
 	struct timeval	tv;
 	int				compiles;
 	int				previous;
+	t_coder			*new;
 
+	new = (t_coder *)idk;
 	gettimeofday(&tv, NULL);
 	compiles = 0;
 	while (compiles < new -> nb_compiles)
@@ -168,47 +85,42 @@ void	fifo(coder *new)
 		previous = compiles;
 		while (previous == compiles)
 		{
-			if (dongles_ready(new))
+			if (schedule(new))
 				compiles++;
-			if (check_burnout(new, tv))
-				return ;
+			if (check_burnout(new, tv) && previous == compiles)
+				return (NULL);
 		}
-		if (skip_time(new -> compile_time, new, tv, 1))
-			return ;
+		skip_time(new -> compile_time, new, tv, 1);
 		gettimeofday(&tv, NULL);
 		printf("%d %d is debugging\n", time_since(new -> tv), new -> id);
 		if (skip_time(new -> debug_time, new, tv, 0))
-			return ;
+			return (NULL);
 		printf("%d %d is refactoring\n", time_since(new -> tv), new -> id);
 		if (skip_time(new -> refactor_time, new, tv, 0))
-			return ;
+			return (NULL);
 	}
-	printf("%d %d is finished %p\n", time_since(new -> tv), new -> id, (new -> lst) -> next);
-	return ;
-}
-
-void	*choice(void *idk)
-{
-	coder	*new;
-
-	new = (coder *)idk;
-	if (strcmp(new -> scheduler, "fifo") == 0)
-		fifo(new);
+	printf("%d %d is finished\n",
+		time_since(new -> tv), new -> id);
 	return (NULL);
 }
 
-int	main(void)
+int	main(int argc, char **argv)
 {
 	pthread_t	*threads;
-	coder		*coders;
+	t_coder		*coders;
 	int			i;
 
-	coders = make_coders();
+	if (argc != 9)
+	{
+		printf("Invalid number of arguments\n");
+		return (0);
+	}
+	coders = make_coders(argv);
 	threads = malloc(coders[0].nb_coders * sizeof(pthread_t));
 	i = 0;
 	while (i < coders[0].nb_coders)
 	{
-		pthread_create(&threads[i], NULL, choice, &coders[i]);
+		pthread_create(&threads[i], NULL, coder_routine, &coders[i]);
 		i++;
 	}
 	i = 0;
