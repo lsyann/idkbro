@@ -33,23 +33,30 @@ int	check_burnout(t_coder *new, struct timeval tv)
 int	skip_time(int nb, t_coder *new, struct timeval tv, int compile)
 {
 	struct timeval	timer;
-	int				idk;
+	int				idk[2];
 
-	idk = new -> id % new -> nb_coders;
 	gettimeofday(&timer, NULL);
-	while (nb + 1 > time_since(timer))
+	idk[0] = timer.tv_usec + nb * 1000;
+	idk[1] = 1;
+	if (idk[0] + nb * 1000 > 1000000)
+		idk[0] -= 1000000;
+	while (idk[1] > 0)
 	{
+		gettimeofday(&timer, NULL);
+		idk[1] = idk[0] - timer.tv_usec;
+		if (idk[0] < nb * 1000 && timer.tv_usec > idk[0])
+			idk[1] = 1000000 - timer.tv_usec + idk[0];
+		if (compile == 0 && check_burnout(new, tv))
+			return (1);
 		if (compile)
 		{
 			gettimeofday(&(new -> dongles[new -> id - 1]), NULL);
-			gettimeofday(&(new -> dongles[idk]), NULL);
+			gettimeofday(&(new -> dongles[new->id % new->nb_coders]), NULL);
 		}
-		if (compile == 0 && check_burnout(new, tv))
-			return (1);
-		usleep(1000);
+		if (idk[1] > 2000)
+			usleep(500);
 	}
-	gettimeofday(&new->last_compile, NULL);
-	return (0);
+	return (gettimeofday(&new->last_compile, NULL), 0);
 }
 
 int	fifo(t_coder *new, int lock)
