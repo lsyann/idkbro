@@ -42,3 +42,4 @@ int		time_since(struct timeval tv);
 void	*coder_routine(void *idk);
 t_coder	*make_coders(char **arg);
 int		cond(t_coder *new, t_list *next);
+int		config(int argc, char **argv);

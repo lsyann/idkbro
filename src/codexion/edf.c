@@ -70,6 +70,7 @@ int	is_ready(t_list *first, t_coder *new)
 	}
 	if (((t_coder *)first -> data)-> id == new -> id)
 		return (0);
+	temp = new -> lst;
 	next = new -> lst;
 	while (((t_coder *)temp->data)->id != new->id)
 	{

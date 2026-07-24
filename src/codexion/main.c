@@ -15,11 +15,8 @@ int	main(int argc, char **argv)
 	t_coder		*coders;
 	int			i;
 
-	if (argc != 9)
-	{
-		printf("Invalid number of arguments\n");
+	if (config(argc, argv))
 		return (0);
-	}
 	coders = make_coders(argv);
 	threads = malloc(coders[0].nb_coders * sizeof(pthread_t));
 	i = 0;
